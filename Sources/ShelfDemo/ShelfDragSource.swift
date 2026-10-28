@@ -220,7 +220,9 @@ final class DragInitiatorView: NSView, NSDraggingSource, NSFilePromiseProviderDe
         // the file out from under the source shelf.
         guard context == .outsideApplication else { return .copy }
         moveRequested = NSEvent.modifierFlags.contains(.command)
-        return moveRequested ? .move : .copy
+        // AppKit narrows the source mask to `.generic` while ⌘ is held, so
+        // `.move` alone intersects to nothing and the drop is refused.
+        return moveRequested ? [.move, .generic] : .copy
     }
 
     func draggingSession(
