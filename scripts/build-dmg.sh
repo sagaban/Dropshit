@@ -7,15 +7,16 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 # Sparkle EdDSA public key — embedded in Info.plist as SUPublicEDKey.
-# Generated once via the Sparkle generate_keys tool and stored in
-# scripts/.sparkle-public-key (gitignored). The matching private key
-# lives in the macOS Keychain on the release machine.
+# Generated once via the Sparkle generate_keys tool. CI passes it in the
+# environment (repo variable SPARKLE_PUBLIC_KEY); locally it can live in
+# scripts/.sparkle-public-key (gitignored). The matching private key is the
+# SPARKLE_PRIVATE_KEY repo secret in CI, or the macOS Keychain locally.
 if [ -f scripts/.sparkle-public-key ]; then
   # shellcheck disable=SC1091
   source scripts/.sparkle-public-key
 fi
 # Without a key the app is built with auto-update disabled (no SUFeedURL /
-# SUPublicEDKey in Info.plist) — used by CI builds that have no Sparkle key.
+# SUPublicEDKey in Info.plist) — e.g. CI before the key is configured.
 if [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then
   echo "WARNING: SPARKLE_PUBLIC_KEY is not set — building with auto-update disabled."
   echo "To enable it, run the Sparkle generate_keys tool and write"
@@ -23,16 +24,17 @@ if [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then
   echo "into scripts/.sparkle-public-key."
 fi
 
-# Sparkle appcast feed — raw GitHub URL on main.
-SPARKLE_FEED_URL="https://raw.githubusercontent.com/iamsumanp/Dropshit/main/appcast.xml"
+# Sparkle appcast feed — published by CI as an asset of every release (see
+# scripts/sign-appcast.sh), so this URL always resolves to the newest one.
+SPARKLE_FEED_URL="${SPARKLE_FEED_URL:-https://github.com/sagaban/Dropshit/releases/latest/download/appcast.xml}"
 
 APP_NAME="Dropshit"
 BIN_NAME="ShelfDemo"
 BUNDLE_ID="com.boski.dropshit"
 # VERSION drives both CFBundleShortVersionString and CFBundleVersion so the
 # value Sparkle compares (sparkle:version vs CFBundleVersion) lines up with
-# the same dotted form we publish in appcast.xml. CI overrides it via the
-# environment (see .github/workflows/release.yml).
+# the same dotted form scripts/sign-appcast.sh publishes in appcast.xml. CI
+# overrides it via the environment (see .github/workflows/release.yml).
 VERSION="${VERSION:-1.5.0}"
 MIN_OS="13.0"
 

@@ -4,6 +4,12 @@ name: Release
 # it as a GitHub release. Version = MAJOR.MINOR from scripts/build-dmg.sh plus
 # the workflow run number as patch (e.g. 1.5.0 in the script → v1.5.<run>).
 # Bump MAJOR.MINOR in the script by hand when you want a new minor line.
+#
+# Auto-update: when the SPARKLE_PUBLIC_KEY repo variable and the
+# SPARKLE_PRIVATE_KEY repo secret are set, the app is built with Sparkle
+# enabled and the release also carries a signed appcast.xml, which installed
+# copies read from releases/latest/download/appcast.xml. Without them the DMG
+# is built with auto-update disabled.
 
 on:
   push:
@@ -36,14 +42,31 @@ jobs:
       - name: Build DMG
         env:
           VERSION: ${{ steps.version.outputs.version }}
+          SPARKLE_PUBLIC_KEY: ${{ vars.SPARKLE_PUBLIC_KEY }}
         run: bash scripts/build-dmg.sh
+
+      - name: Sign update and write appcast
+        if: ${{ vars.SPARKLE_PUBLIC_KEY != '' }}
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+          SPARKLE_PRIVATE_KEY: ${{ secrets.SPARKLE_PRIVATE_KEY }}
+        run: |
+          # An app built with the public key but released without a feed would
+          # point existing installs at a missing appcast, so fail loudly.
+          if [ -z "${SPARKLE_PRIVATE_KEY}" ]; then
+            echo "SPARKLE_PUBLIC_KEY is set but the SPARKLE_PRIVATE_KEY secret is missing" >&2
+            exit 1
+          fi
+          bash scripts/sign-appcast.sh Dropshit.dmg "${VERSION}" > appcast.xml
 
       - name: Publish release
         env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "v${VERSION}" Dropshit.dmg \
+          assets=(Dropshit.dmg)
+          [ -f appcast.xml ] && assets+=(appcast.xml)
+          gh release create "v${VERSION}" "${assets[@]}" \
             --target "${GITHUB_SHA}" \
             --title "Dropshit v${VERSION}" \
             --generate-notes \

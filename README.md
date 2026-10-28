@@ -85,27 +85,22 @@ gh release create v1.2 Dropshit.dmg \
 
 ### Releasing a new version (with auto-update)
 
-Dropshit ships with Sparkle 2.x for in-app updates from v1.5.0 onward. Each release is signed with an EdDSA private key and listed in `appcast.xml` so existing installs pick it up.
+Every push to `main` (every merged PR) runs `.github/workflows/release.yml`, which builds the DMG and publishes a GitHub release `v<MAJOR.MINOR>.<run number>`. Dropshit uses Sparkle 2.x for in-app updates: each release also carries an `appcast.xml` signed with an EdDSA key, and installed copies read it from `releases/latest/download/appcast.xml`.
 
-**One-time setup (per release machine):**
+**One-time setup:**
 
 1. `swift package resolve` — pulls Sparkle's CLI tools into `.build/artifacts/sparkle/Sparkle/bin/`.
 2. `.build/artifacts/sparkle/Sparkle/bin/generate_keys` — creates the EdDSA key pair. The private key lives in your macOS Keychain; the tool prints the public key.
-3. Save the public key into `scripts/.sparkle-public-key` (gitignored):
+3. Store the public key as a repo variable and the private key as a repo secret:
    ```sh
-   echo "SPARKLE_PUBLIC_KEY=<paste public key here>" > scripts/.sparkle-public-key
+   gh variable set SPARKLE_PUBLIC_KEY --body "<public key>"
+   .build/artifacts/sparkle/Sparkle/bin/generate_keys -x sparkle-private-key
+   gh secret set SPARKLE_PRIVATE_KEY < sparkle-private-key && rm sparkle-private-key
    ```
 
-**Per release:**
+Until both are set, CI builds the app with auto-update disabled. Installs of such a build need to download the first auto-update-enabled release manually once; after that they update themselves on Sparkle's daily check or via "Check for Updates…" in the menu.
 
-1. Bump `VERSION` in `scripts/build-dmg.sh` (drives both `CFBundleShortVersionString` and `CFBundleVersion`, which Sparkle compares against `sparkle:version` in the appcast).
-2. `bash scripts/build-dmg.sh` — produces `Dropshit.dmg` with Sparkle.framework embedded and the feed URL + public key baked into Info.plist.
-3. `bash scripts/sign-appcast.sh Dropshit.dmg <version>` — prints an appcast `<item>` snippet with the signed enclosure to stdout.
-4. Prepend that snippet inside the `<channel>` block in `appcast.xml`.
-5. `gh release create v<version> Dropshit.dmg --title "Dropshit v<version>" --notes "..."`
-6. `git add appcast.xml && git commit -m "release: v<version>" && git push origin main`
-
-Existing v1.5.0+ installs see the new version on their next daily check (or when the user clicks "Check for Updates…" in the menu). v1.4.x users will need to download v1.5.0 manually one final time.
+To bump MAJOR.MINOR, edit `VERSION` in `scripts/build-dmg.sh`. To sign a DMG by hand, `bash scripts/sign-appcast.sh Dropshit.dmg <version> > appcast.xml` uses the key from your Keychain (or `SPARKLE_PRIVATE_KEY`).
 
 ## Permissions
 
