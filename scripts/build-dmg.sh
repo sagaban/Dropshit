@@ -14,12 +14,13 @@ if [ -f scripts/.sparkle-public-key ]; then
   # shellcheck disable=SC1091
   source scripts/.sparkle-public-key
 fi
+# Without a key the app is built with auto-update disabled (no SUFeedURL /
+# SUPublicEDKey in Info.plist) — used by CI builds that have no Sparkle key.
 if [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then
-  echo "ERROR: SPARKLE_PUBLIC_KEY is not set."
-  echo "Run the Sparkle generate_keys tool and write"
+  echo "WARNING: SPARKLE_PUBLIC_KEY is not set — building with auto-update disabled."
+  echo "To enable it, run the Sparkle generate_keys tool and write"
   echo "  SPARKLE_PUBLIC_KEY=<key>"
   echo "into scripts/.sparkle-public-key."
-  exit 1
 fi
 
 # Sparkle appcast feed — raw GitHub URL on main.
@@ -30,8 +31,9 @@ BIN_NAME="ShelfDemo"
 BUNDLE_ID="com.boski.dropshit"
 # VERSION drives both CFBundleShortVersionString and CFBundleVersion so the
 # value Sparkle compares (sparkle:version vs CFBundleVersion) lines up with
-# the same dotted form we publish in appcast.xml.
-VERSION="1.5.0"
+# the same dotted form we publish in appcast.xml. CI overrides it via the
+# environment (see .github/workflows/release.yml).
+VERSION="${VERSION:-1.5.0}"
 MIN_OS="13.0"
 
 APP_DIR="dist/${APP_NAME}.app"
@@ -91,6 +93,13 @@ fi
 mkdir -p "${APP_DIR}/Contents/Frameworks"
 cp -R "${SPARKLE_FRAMEWORK_SRC}" "${APP_DIR}/Contents/Frameworks/"
 
+SPARKLE_PLIST_KEYS=""
+if [ -n "${SPARKLE_PUBLIC_KEY:-}" ]; then
+  SPARKLE_PLIST_KEYS="  <key>SUFeedURL</key><string>${SPARKLE_FEED_URL}</string>
+  <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_KEY}</string>
+  <key>SUEnableInstallerLauncherService</key><false/>"
+fi
+
 cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -108,9 +117,7 @@ cat > "${APP_DIR}/Contents/Info.plist" <<PLIST
   <key>LSMinimumSystemVersion</key><string>${MIN_OS}</string>
   <key>LSUIElement</key><true/>
   <key>NSPrincipalClass</key><string>NSApplication</string>
-  <key>SUFeedURL</key><string>${SPARKLE_FEED_URL}</string>
-  <key>SUPublicEDKey</key><string>${SPARKLE_PUBLIC_KEY}</string>
-  <key>SUEnableInstallerLauncherService</key><false/>
+${SPARKLE_PLIST_KEYS}
 </dict>
 </plist>
 PLIST

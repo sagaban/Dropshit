@@ -1,0 +1,50 @@
+name: Release
+
+# Every push to main (i.e. every merged PR) builds Dropshit.dmg and publishes
+# it as a GitHub release. Version = MAJOR.MINOR from scripts/build-dmg.sh plus
+# the workflow run number as patch (e.g. 1.5.0 in the script → v1.5.<run>).
+# Bump MAJOR.MINOR in the script by hand when you want a new minor line.
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Compute version
+        id: version
+        run: |
+          base="$(sed -nE 's/^VERSION="\$\{VERSION:-([0-9]+\.[0-9]+)\.[0-9]+\}"$/\1/p' scripts/build-dmg.sh)"
+          if [ -z "$base" ]; then
+            echo "Could not read base VERSION from scripts/build-dmg.sh" >&2
+            exit 1
+          fi
+          echo "version=${base}.${GITHUB_RUN_NUMBER}" >> "$GITHUB_OUTPUT"
+
+      - name: Build DMG
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: bash scripts/build-dmg.sh
+
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
+        run: |
+          gh release create "v${VERSION}" Dropshit.dmg \
+            --target "${GITHUB_SHA}" \
+            --title "Dropshit v${VERSION}" \
+            --generate-notes \
+            --notes "First launch (ad-hoc signed, not notarized): \`xattr -dr com.apple.quarantine /Applications/Dropshit.app\`"

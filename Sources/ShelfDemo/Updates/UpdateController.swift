@@ -21,8 +21,13 @@ final class UpdateController {
         // userDriverDelegate: nil — the standard driver's defaults are fine
         //   (modal "Update available" prompt; auto-installs on quit if user
         //   chose "Install on Quit").
+        // Builds packaged without a Sparkle key (e.g. CI builds of a fork)
+        // have no SUFeedURL/SUPublicEDKey; starting the updater there would
+        // pop a "failed to start" alert at launch, so leave it stopped. The
+        // "Check for Updates…" menu item then stays disabled.
+        let updatesConfigured = Bundle.main.object(forInfoDictionaryKey: "SUPublicEDKey") != nil
         updaterController = SPUStandardUpdaterController(
-            startingUpdater: true,
+            startingUpdater: updatesConfigured,
             updaterDelegate: nil,
             userDriverDelegate: nil
         )
