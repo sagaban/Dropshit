@@ -4,6 +4,15 @@ A free, open-source macOS shelf for files. Drag stuff in, drop it out wherever y
 
 It's an exact clone of [Dropover](https://dropoverapp.com/) — same shake-to-summon shelf, same drop-anywhere-to-collect workflow, same drag-out-to-deliver behavior — except free.
 
+> **This is a fork** of [iamsumanp/Dropshit](https://github.com/iamsumanp/Dropshit) by Suman Pokharel, with a few changes on top. Releases and auto-updates come from this repo; upstream changes are not pulled in automatically.
+>
+> What the fork adds:
+> - **⌘-drag to move.** Dragging a file out of a shelf still copies it; hold ⌘ while dragging to another folder to move it from its original location instead.
+> - **Launch crash fix** on machines other than the one that built the app (missing SwiftPM resource bundle).
+> - **A release on every merge.** CI builds the DMG and publishes a GitHub release for every push to `main`.
+> - **Working auto-update.** Releases carry a signed Sparkle appcast, so installed copies update themselves.
+> - **Building with Command Line Tools only** (no Xcode) — see [Build from source](#build-from-source).
+
 <img width="730" height="572" alt="Image2026-05-04 at 00 07 52@2x" src="https://github.com/user-attachments/assets/328a8574-0c14-4f75-9814-df07415fe675" />
 
 
@@ -15,7 +24,7 @@ Dropover is a great paid app. Dropshit is the same idea, written from scratch as
 
 - **Shake a Finder drag** to summon a floating shelf at the cursor. Drop the files onto it.
 - **Drop anywhere on screen** while a shelf is open to add files, images, or text.
-- **Drag back out** to any app — Finder, browser upload zones, Mail, Slack, Messages, anywhere that accepts a file URL.
+- **Drag back out** to any app — Finder, browser upload zones, Mail, Slack, Messages, anywhere that accepts a file URL. Dragging copies; hold **⌘** to move the file out of its original location.
 - **Dock to the screen edge** for ambient access; the shelf becomes a tab you can hover or drop onto.
 - **Multiple shelves** at once, each with its own floating panel.
 - **Auto-expiry** — shelves clean themselves up after a configurable retention window.
@@ -42,27 +51,27 @@ Dropover is a great paid app. Dropshit is the same idea, written from scratch as
 
 ### Pre-built DMG
 
-Latest release: <https://github.com/iamsumanp/Dropshit/releases/latest>
+Latest release: <https://github.com/sagaban/Dropshit/releases/latest>
 
 One-liner install:
 
 ```sh
 curl -L -o ~/Downloads/Dropshit.dmg \
-  https://github.com/iamsumanp/Dropshit/releases/latest/download/Dropshit.dmg
+  https://github.com/sagaban/Dropshit/releases/latest/download/Dropshit.dmg
 open ~/Downloads/Dropshit.dmg
 # Drag Dropshit.app to /Applications, eject the DMG, then:
 xattr -dr com.apple.quarantine /Applications/Dropshit.app
 open /Applications/Dropshit.app
 ```
 
-The `xattr` step is one-time per machine — the DMG is ad-hoc signed (no Apple Developer ID / notarization), so Gatekeeper marks it quarantined on first download. After that, Dropshit lives in your menubar; click the icon to see options, or shake any Finder drag to summon a shelf.
+The `xattr` step is one-time per machine — the DMG is ad-hoc signed (no Apple Developer ID / notarization), so Gatekeeper marks it quarantined on first download. After that, Dropshit lives in your menubar; click the icon to see options, or shake any Finder drag to summon a shelf. New releases arrive through "Check for Updates…" in the menu.
 
 ### Build from source
 
 Requires macOS 13+ and the Swift toolchain that ships with Xcode 15+ (Swift 5.9).
 
 ```sh
-git clone https://github.com/iamsumanp/Dropshit.git
+git clone https://github.com/sagaban/Dropshit.git
 cd Dropshit
 
 # Run for development:
@@ -73,13 +82,14 @@ bash scripts/build-dmg.sh
 # → produces dist/Dropshit.app and Dropshit.dmg in the repo root
 ```
 
-Cutting a new release after a build:
+With only the Command Line Tools installed (no Xcode), the default macOS SDK may fail with `plugin for module 'SwiftUIMacros' not found`. Build against an older SDK and point dyld at the Sparkle framework the debug build leaves next to the binary:
 
 ```sh
-gh release create v1.2 Dropshit.dmg \
-  --title "Dropshit v1.2" \
-  --notes "What changed in this release…"
+SDKROOT=/Library/Developer/CommandLineTools/SDKs/MacOSX26.5.sdk swift build
+DYLD_FRAMEWORK_PATH=.build/out/Products/Debug .build/out/Products/Debug/ShelfDemo
 ```
+
+Quit the installed Dropshit first so the two copies don't both react to drags. Releases are cut by CI, not by hand — see below.
 
 `scripts/build-dmg.sh` regenerates the app icon (`scripts/make-icon.swift`), builds in release mode, embeds Sparkle.framework, ad-hoc signs the bundle inner-out, and packages a DMG with an `/Applications` symlink for drag-install.
 
