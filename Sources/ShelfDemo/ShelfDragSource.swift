@@ -53,6 +53,12 @@ final class DragInitiatorView: NSView, NSDraggingSource, NSFilePromiseProviderDe
 
     private var mouseDownPoint: NSPoint?
     private var sessionActive = false
+    /// True when the current drag should move the files out of their original
+    /// location instead of copying them. Copy is the default; holding ⌘ while
+    /// dragging opts into a move. Captured from the last operation mask we
+    /// vended so the (async) file-promise write still knows the choice after
+    /// the user has released the key.
+    private var moveRequested = false
     private let dragThreshold: CGFloat = 4
 
     private static let promiseQueue: OperationQueue = {
@@ -160,6 +166,7 @@ final class DragInitiatorView: NSView, NSDraggingSource, NSFilePromiseProviderDe
         }
 
         sessionActive = true
+        moveRequested = false
         onStart?()
         let session = beginDraggingSession(with: draggingItems, event: event, source: self)
         session.animatesToStartingPositionsOnCancelOrFail = true
@@ -209,7 +216,11 @@ final class DragInitiatorView: NSView, NSDraggingSource, NSFilePromiseProviderDe
         _ session: NSDraggingSession,
         sourceOperationMaskFor context: NSDraggingContext
     ) -> NSDragOperation {
-        .copy
+        // Within the app (e.g. shelf → shelf) always copy; moving would yank
+        // the file out from under the source shelf.
+        guard context == .outsideApplication else { return .copy }
+        moveRequested = NSEvent.modifierFlags.contains(.command)
+        return moveRequested ? .move : .copy
     }
 
     func draggingSession(
@@ -247,7 +258,13 @@ final class DragInitiatorView: NSView, NSDraggingSource, NSFilePromiseProviderDe
             if FileManager.default.fileExists(atPath: url.path) {
                 try FileManager.default.removeItem(at: url)
             }
-            try FileManager.default.copyItem(at: sourceURL, to: url)
+            if moveRequested {
+                // The shelf entry is pruned by the missing-file sweep once
+                // the source path disappears.
+                try FileManager.default.moveItem(at: sourceURL, to: url)
+            } else {
+                try FileManager.default.copyItem(at: sourceURL, to: url)
+            }
             completionHandler(nil)
         } catch {
             completionHandler(error)
