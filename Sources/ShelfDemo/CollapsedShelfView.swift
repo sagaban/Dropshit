@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct CollapsedShelfView: View {
@@ -400,8 +401,56 @@ struct GrabHandle: View {
             .padding(.horizontal, 16)
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
-            .onTapGesture { onTap?() }
+            // Dragging the handle moves the panel; a click still docks it.
+            // The rest of the panel can't serve as a window-background drag:
+            // the card claims drags for files and the container's
+            // contentShape keeps AppKit from treating it as background.
+            .overlay(WindowDragArea(onClick: onTap))
             .animation(.easeOut(duration: 0.15), value: hovering)
+    }
+}
+
+/// Moves its window when dragged and reports a click when released without
+/// moving, so one control can be both a drag handle and a button.
+private struct WindowDragArea: NSViewRepresentable {
+    var onClick: (() -> Void)?
+
+    func makeNSView(context: Context) -> WindowDragView {
+        let view = WindowDragView()
+        view.onClick = onClick
+        return view
+    }
+
+    func updateNSView(_ nsView: WindowDragView, context: Context) {
+        nsView.onClick = onClick
+    }
+}
+
+private final class WindowDragView: NSView {
+    var onClick: (() -> Void)?
+
+    private var mouseDownPoint: NSPoint?
+    private let dragThreshold: CGFloat = 3
+
+    override var mouseDownCanMoveWindow: Bool { false }
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func mouseDown(with event: NSEvent) {
+        mouseDownPoint = event.locationInWindow
+    }
+
+    override func mouseDragged(with event: NSEvent) {
+        guard let start = mouseDownPoint else { return }
+        let loc = event.locationInWindow
+        if hypot(loc.x - start.x, loc.y - start.y) > dragThreshold {
+            mouseDownPoint = nil
+            window?.performDrag(with: event)
+        }
+    }
+
+    override func mouseUp(with event: NSEvent) {
+        if mouseDownPoint != nil { onClick?() }
+        mouseDownPoint = nil
     }
 }
 
